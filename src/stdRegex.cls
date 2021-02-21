@@ -72,12 +72,247 @@ Attribute VB_Exposed = False
 '   Range("A1:B1").value = Array("ID-Date","Count")
 '   Range("A2").Resize(ubound(vResult,1),2).value = vResult
 
-Private p_initialised As Boolean
-Private p_pattern As String
-Private p_cPattern As String
-Private p_flags As String
-Private p_namesDict As Object
-Private p_regex As Object
+
+'Regex tokenise example
+'   /ab[c-d](?<someName>efg)\s+
+' -->
+'   [a-a][b-b][c-d](?<someName>[e-e][f-f][g-g])[\t-\r ]
+' -->
+'   [
+'     {type: 1, charRange: {min: "a", max:"a", negated: false}, capture:{}},
+'     {type: 1, charRange: {min: "b", max:"b", negated: false}, capture:{}},
+'     {type: 1, charRange: {min: "c", max:"d", negated: false}, capture:{}},
+'     {type: 3, charRange: {}, capture:{name: "someName", index: ###}},
+'     {type: 1, charRange: {min: "e", max:"e", negated: false}, capture:{}},
+'     {type: 1, charRange: {min: "f", max:"f", negated: false}, capture:{}},
+'     {type: 1, charRange: {min: "g", max:"g", negated: false}, capture:{}},
+'     ...
+'   ]
+
+Private Enum ESymbolType
+  iEmptyTransition = 0
+  iCharacterRanges = 1
+  iCaptureGroupCheck = 2 '/(a)(?0)/
+  iCaptureStart = 3
+  iCaptureEnd = 4
+End Enum
+
+Private Type CharacterRange
+  CharMin as Integer  '2 Byte
+  CharMax as Integer  '2 Byte
+  Negated as boolean  '2 Byte
+End Type
+
+Private Type CaptureInfo
+  CaptureName as string '4+1+n byte (pointer to string of n chars length. Ends in \0)
+  iStart as long        '4 byte
+End Type
+
+Private Type Symbol
+  iSymbolType as ESymbolType           '2 Byte
+  CharacterRanges() as CharacterRange  '6*n Byte  where n>=1. Note uninitialised == 6 bytes
+  Capture as CaptureInfo               '
+End Type
+
+'https://kean.blog/post/regex-parser
+'https://kean.blog/post/regex-compiler
+'https://kean.blog/post/regex-matcher
+'https://deniskyashif.com/2019/02/17/implementing-a-regular-expression-engine/
+Private Sub Compile(ByVal sPattern as string)
+  Call parseTokenBlock(opStack, sPattern, )
+End Sub
+
+
+Private Sub parseTokenBlock(ByRef opStack, ByRef sPattern as string, ByRef iIndex as long)
+    
+End Sub
+
+
+
+
+
+
+
+
+
+'Test if a character matches a symbol
+'@param {Byte}   The character to be tested
+'@param {Symbol} The symbol to be tested against
+'@returns {Boolean} Whether the character matched or not
+Private Function testSymbol(ByRef char as Byte, ByRef sym as Symbol) as Boolean
+  select case sym.iSymbolType 
+    case iCharacterRanges
+      Dim b as boolean: b=false
+      For i = 0 to ubound(sym.CharacterRanges)
+        b = b or testCharRange(char,sym.CharacterRanges(i))
+        if b then exit for
+      next
+      testSymbol = b
+    case else
+      '...
+  end select
+End Function
+
+'Test that a character is in a given range
+'@param {Byte} The character to be tested
+'@param {CharacterRange} The character range to be tested against
+'@returns {Boolean} Whether the character matched or not
+Private Function testCharRange(ByRef char as Byte, ByRef Range as CharacterRange) as boolean
+  With Range
+    testCharRange = .Negated XOR .Min <= char AND char <= .max
+  end with
+End Function
+
+
+'Creates a Symbol comprising of 2 character ranges resembling a whitespace character \s
+'@returns {Symbol} A whitespace symbol
+Private Function getWhiteSpaceSymbol() as Symbol
+  getWhiteSpaceSymbol.iSymbolType = iCharacterRanges
+  Redim getWhiteSpaceSymbol.CharacterRanges(0 to 1)
+  getWhiteSpaceSymbol.CharacterRanges(0) = getCharRange(9,13)
+  getWhiteSpaceSymbol.CharacterRanges(0) = getCharRange(32)
+End Function
+
+'Given a min and optional max and negated, creates a CharacterRange to match
+'@param {Long} Min - The min (inclusive) ascii value to match.
+'@param {Long} Max - The max (inclusive) ascii value to match. If max not provided, min is used as max.
+'@param {Boolean} Negated - Negated character ranges will return false if theres a match, and true if there isn't.
+'@return {CharacterRange} Character range struct for matching
+Private Function getCharRange(ByVal Min as long, Optional ByVal Max as long = -1, Optional ByVal Negated as boolean = false) as CharacterRange
+  if Max = -1 then Max = Min
+  getCharRange.CharMin = Min
+  getCharRange.ChatMax = Max
+  getCharRange.Negated = Negated
+End Function 
+
+
+
+
+
+
+
+'MIGHT NOT NEED THESE as we use DFS instead of BFS
+'==================================================
+'    Private NFAMetadata
+'      iStart as long
+'      iEnd as long
+'    End Type
+'    Private Type NFAEdge
+'      Rule as Symbol
+'      iNext as long
+'    End Type
+'    Private Type NFANode
+'      '
+'      metadata as NFAMetadata
+'    
+'      '
+'      edges() as NFAEdge
+'    End type
+'    Private Type NFAStatePath
+'      'The node that we came from
+'      node as long
+'    
+'      'Keep track of how often this path is referenced, for garbage collection?
+'      dependencies as long
+'    
+'      'The index of the character that was consumed to get in this node
+'      char as long
+'      
+'      'The inex within this array of the previous node in the path
+'      prev as long
+'    End Type
+'    
+'    Private NFANodes() as NFANode
+'    
+'    'All the nodes and paths to get there, that we are currently in (are currently active)
+'    Private currentState() as long
+'    
+'    Private paths() as NFAStatePath
+'==================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'Private p_initialised As Boolean
+'Private p_pattern As String
+'Private p_cPattern As String
+'Private p_flags As String
+'Private p_namesDict As Object
+'Private p_regex As Object
+
+
 
 
 'Creates a regex object given a pattern and flags.
@@ -111,8 +346,6 @@ Public Function Create(ByVal pattern As String, Optional ByVal flags As String =
   set Create = cache(sKey)
 End Function
 
-
-
 'Initialises the class from within the static superclass. This method is meant for internal use only. Use at your own risk.
 '@protected
 '
@@ -121,90 +354,19 @@ End Function
 '@example
 '    obj.init("A\d+","i")
 Friend Sub init(ByVal pattern As String, ByVal flags As String)
-  If Me Is stdRegex Then
-    stdError.Raise ("Cannot run init on class")
-    Exit Sub
-  End If
-  
-  p_pattern = pattern
-  p_flags = flags
-
-  'Named regexp used to detect capturing groups and named capturing groups
-  'Captures all capturing groups. All capturing groups with a name has a subcapturing group containing the name.
-  'This is used to distribute names across the submatches captured across the regular expression.
-  'Not the regex used here has to ignore all non-capturing groups. E.G. (?:...), (?!...), (?=...), (?<=...), (?<!...)
-  'In theory must also not match a (\\)*\(
-  Static NamesMatcher As Object
-  If NamesMatcher Is Nothing Then
-    Set NamesMatcher = CreateObject("VBScript.RegExp")
-    NamesMatcher.pattern = "\((?!(?:\?:|\?!|\?=|\?<=|\?<!))(?:\?\<(\w+?)\>)?"  'SaveEscape("(")  -->  match regex --> LoadEscape("(")
-    NamesMatcher.Global = True
-  End If
-  
-  'Names replacer is used to strip the name syntax from the regular expression before it's injected into VBScript.Regexp.
-  Static NamesReplacer As Object
-  If NamesReplacer Is Nothing Then
-    Set NamesReplacer = CreateObject("VBScript.Regexp")
-    NamesReplacer.pattern = "\((?!(?:\?:|\?!|\?=|\?<=|\?<!))(?:\?\<(\w+?)\>)?"  'SaveEscape("(")  -->  Replace regex with "(" --> LoadEscape("(")
-    NamesReplacer.Global = True
-  End If
-
-  'Ignore White Space option (x) will ignore all undeclared whitespace. It also makes # a comment
-  'i.e. `/hello world\ and stuff #this is a comment/` --> `/helloworld andstuff/`
-  Static OptionIgnoreWhiteSpace As Object
-  If OptionIgnoreWhiteSpace Is Nothing Then
-    Set OptionIgnoreWhiteSpace = CreateObject("VBScript.RegExp")
-    OptionIgnoreWhiteSpace.pattern = " +"                               'SaveEscape(" ")  -->  Replace " +" with "" --> LoadEscape(" ")
-    OptionIgnoreWhiteSpace.Global = True
-  End If
-  
-  'Non standard option to allow for the injection of comments into the end of regex strings using #.* under option c
-  Static OptionIgnoreComment As Object
-  If OptionIgnoreComment Is Nothing Then
-    Set OptionIgnoreComment = CreateObject("VBScript.RegExp")
-    OptionIgnoreComment.pattern = "#.*"                                'SaveEscape("#")  -->  Replace "#.*" with "" --> LoadEscape("#")
-    OptionIgnoreComment.Global = True
-  End If
-
-  'SingleLineMode (s) forces period (.) to match every character (instead of every character apart from `\n`).
-  'With this regex you can do:            OptionSingleLineMode.replace(sRegex,"$1(?:.|\s)")
-  'to inject the new regex characters into place.
-  Static OptionSingleLineMode As Object
-  If OptionSingleLineMode Is Nothing Then
-    Set OptionSingleLineMode = CreateObject("VBScript.RegExp")
-    OptionSingleLineMode.pattern = "(?<!\\)((?:\\\\)*)\."             'SaveEscape(".")  -->  Replace "." with "(?:.|\s)" --> LoadEscape(".")
-    OptionSingleLineMode.Global = True
-  End If
-
-  'Create dictionary of names in the regex.
-  Set p_namesDict = NamesMatcher.Execute(SaveEscape(p_pattern, "("))
-  
-  
-  'Initialise p_regex
-  Set p_regex = CreateObject("VBScript.RegExp")
-  p_regex.pattern = LoadEscape(NamesReplacer.Replace(SaveEscape(p_pattern, "("), "("), "(")
-
-  'Process regex options
-  Dim i As Integer
-  For i = 1 To Len(flags)
-    Select Case Mid(flags, i, 1)
-      Case "i"
-        p_regex.ignoreCase = True
-      Case "g"
-        p_regex.Global = True
-      Case "m"
-        p_regex.MultiLine = True
-      Case "x"
-        p_regex.pattern = LoadEscape(OptionIgnoreWhiteSpace.Replace(SaveEscape(p_regex.pattern, " "), ""), " ")
-      Case "c"
-        p_regex.pattern = LoadEscape(OptionIgnoreComment.Replace(SaveEscape(p_regex.pattern, "#"), ""), "#")
-      Case "s"
-        p_regex.pattern = LoadEscape(OptionSingleLineMode.Replace(SaveEscape(p_regex.pattern, "."), "(?:.|\s)"), ".")
-    End Select
-  Next
-
-  p_initialised = True
+  'TODO:
 End Sub
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -214,40 +376,18 @@ End Sub
 
 'Get/Set pattern for regex
 Public Property Get pattern() As String
-  If Me Is stdRegex Then
-    stdError.Raise ("Property called on class not object")
-    Exit Property
-  End If
-
-  pattern = p_pattern
+  'TODO:
 End Property
 Public Property Let pattern(val As String)
-  If Me Is stdRegex Then
-    stdError.Raise ("Property called on class not object")
-    Exit Property
-  End If
-  
-  Call init(val, p_flags)
+  'TODO:
 End Property
-
-
 
 'Get/Set Flags for regex
 Public Property Get flags() As String
-  If Me Is stdRegex Then
-    stdError.Raise ("Property called on class not object")
-    Exit Property
-  End If
-
-  flags = p_flags
+  'TODO:
 End Property
 Public Property Let flags(val As String)
-  If Me Is stdRegex Then
-    stdError.Raise ("Property called on class not object")
-    Exit Property
-  End If
-
-  Call init(p_pattern, val)
+  'TODO:
 End Property
 
 
@@ -265,12 +405,7 @@ End Property
 'Result:
 '    True
 Public Function Test(ByVal sHaystack As String) As Boolean
-  If Me Is stdRegex Then
-    stdError.Raise ("Method called on class not object")
-    Exit Function
-  End If
-  
-  Test = p_regex.Test(sHaystack)
+  'TODO:
 End Function
 
 
@@ -301,35 +436,7 @@ End Function
 '      "$RAW": {...}
 '    }
 Public Function Match(ByVal sHaystack As String) As Object
-  If Me Is stdRegex Then
-    stdError.Raise ("Method called on class not object")
-    Exit Function
-  End If
-  
-  'Execute regex on haystack provided
-  Dim oMatches As Object
-  Set oMatches = p_regex.Execute(sHaystack)
-  
-  'Create dictionary to store this match's data
-  Dim oRet As Object
-  Set oRet = CreateObject("Scripting.Dictionary")
-
-  'Basic properties
-  oRet(0) = oMatches(0)
-  oRet("$COUNT") = oMatches(0).Submatches.Count
-  Set oRet("$RAW") = oMatches
-
-  'Loop over submatches and apply to dict
-  Dim i As Long
-  For i = 1 To p_namesDict.Count
-    oRet(i) = oMatches(0).Submatches(i - 1)
-    If Not IsEmpty(oMatches(0).Submatches(i - 1)) then
-      If Not IsEmpty(p_namesDict(i - 1).Submatches(0)) Then oRet(p_namesDict(i - 1).Submatches(0)) = oMatches(0).Submatches(i - 1)
-    End If
-  Next i
-  
-  'Return data
-  Set Match = oRet
+  TODO:
 End Function
 
 
@@ -352,52 +459,7 @@ End Function
 'Result:
 '    [{0: "12345-STA1", ...}, {0: "12323-STB9", ...}, {0: "23565-STC2", ...}, {0: "62346-STZ9", ...}]
 Public Function MatchAll(ByVal sHaystack As String) As Collection
-  If Me Is stdRegex Then
-    stdError.Raise ("Method called on class not object")
-    Exit Function
-  End If
-  
-  'Note: In order to match all, we need to ensure global is true, but will revert our changes afterwards.
-  Dim bOriginalGlobal As Boolean: bOriginalGlobal = p_regex.Global
-  p_regex.Global = True
-  
-  'Execute regex on haystack provided
-  Dim oMatches As Object
-  Set oMatches = p_regex.Execute(sHaystack)
-  
-  'Revert forced global
-  p_regex.Global = bOriginalGlobal
-  
-  'Create array to hold match data
-  Dim oRet As Collection
-  Set oRet = new Collection
-  
-  'Loop over all matches
-  Dim i As Long, j As Long
-  For i = 1 To oMatches.Count
-    'Create dictionary to store this match's data
-    Dim oDict As Object
-    Set oDict = CreateObject("Scripting.Dictionary")
-
-    'Basic properties
-    oDict(0) = oMatches(i - 1)
-    oDict("$COUNT") = oMatches(i - 1).Submatches.Count
-    Set oDict("$RAW") = oMatches
-
-    'Loop over submatches and apply to dict
-    For j = 1 To p_namesDict.Count
-      oDict(j) = oMatches(i - 1).Submatches(j - 1)
-      If Not IsEmpty(oMatches(i - 1).Submatches(j - 1)) then
-        If Not IsEmpty(p_namesDict(j - 1).Submatches(0)) Then oDict(p_namesDict(j - 1).Submatches(0)) = oMatches(i - 1).Submatches(j - 1)
-      end if
-    Next
-
-    'Push dictionary to array
-    Call oRet.add(oDict)
-  Next
-
-  'Return data
-  Set MatchAll = oRet
+  'TODO:
 End Function
 
 
@@ -428,26 +490,8 @@ End Function
 '    23565-STC2,??/??/????,23
 '    62346-STZ9,01/05/1932,5
 Public Function Replace(ByVal sHaystack As String, ByVal sReplacer As String) As String
-  If Me Is stdRegex Then
-    stdError.Raise ("Method called on class not object")
-    Exit Function
-  End If
-  
-  'Replace names in sReplacer with indexed replacers ($1,$2,...)
-  For i = 1 To p_namesDict.Count
-    If Not IsEmpty(p_namesDict(i - 1).Submatches(0)) Then
-      Dim sName As String
-      sName = p_namesDict(i - 1).Submatches(0)
-      
-      sReplacer = VBA.Replace(sReplacer, "$" & sName, "$" & i)
-    End If
-  Next
-
-  'Pass to vbscript regex handler and return
-  Replace = p_regex.Replace(sHaystack, sReplacer)
+  'TODO:
 End Function
-
-
 
 'Given a Haystack and a Format, Generate a string containing all matches in the format provided.
 '
@@ -562,22 +606,4 @@ Private Function FormatFromMatch(ByVal match as object, ByVal sFormat as string)
 
   sFormat = VBA.Replace(sFormat, "bfde0637-8207-418d-9d34-68ba974e8110","$")
   FormatFromMatch = sFormat
-End Function
-
-
-
-'Escape chars within a string
-'@param {ByVal String} Haystack to search
-'@param {ByVal String} Char to escape
-'@returns {String} Escaped string
-Private Function SaveEscape(ByVal sHaystack As String, ByVal sChar As String) As String
-  SaveEscape = VBA.Replace(VBA.Replace(sHaystack, "\\", ";f934b47b-b799-4f52-9b4c-f170a82b52fe;"), "\" & sChar, ";6632df85-1730-4159-a742-5b0c8c526ab8;")
-End Function
-
-'Convert a string with escaped chars to those without escaped chars
-'@param {ByVal String} Haystack to search
-'@param {ByVal String} Char to un-escape
-'@returns {String} Unescaped string
-Private Function LoadEscape(ByVal sHaystack As String, ByVal sChar As String) As String
-  LoadEscape = VBA.Replace(VBA.Replace(sHaystack, ";f934b47b-b799-4f52-9b4c-f170a82b52fe;", "\\"), ";6632df85-1730-4159-a742-5b0c8c526ab8;", "\" & sChar)
 End Function
