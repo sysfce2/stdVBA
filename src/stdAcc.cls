@@ -354,7 +354,11 @@ End Sub
 
 'Get all descendents of the stdAcc control
 '@returns {Collection} Collection of descendents
+#if stdFullIntegration then
+Public Function GetDescendents() As stdEnumerator
+#else
 Public Function GetDescendents() As Collection
+#end if
     'Create collection which will be returned
     Dim c As Collection
     Set c = New Collection
@@ -372,7 +376,11 @@ Public Function GetDescendents() As Collection
     Next
     
     'Return descendents
-    Set GetDescendents = c
+    #if stdFullIntegration then
+        Set GetDescendents = stdEnumerator.CreateFromIEnumVariant(c)
+    #else
+        Set GetDescendents = c
+    #end if
 End Function
 
 'Search the IAccessible tree for elements which match a certain criteria. Return the first element found.
@@ -482,7 +490,11 @@ End Function
 ' 'Find all elements with depth <= 4:
 ' el.FindAll(stdLambda.Create("if $2 < 4 then 4 else if $2 = 4 then 1 else 3"))
 ' ```
+#if stdFullIntegration then
+Public Function FindAll(ByVal query As stdICallable, optional byval searchType as EAccFindType=EAccFindType.DepthFirst) As stdEnumerator
+#else
 Public Function FindAll(ByVal query As stdICallable, optional byval searchType as EAccFindType=EAccFindType.DepthFirst) As Collection
+#end if
     Dim stack() As tFindNode
     ReDim stack(0 To 0)
     stack(0).initialised = true
@@ -496,7 +508,8 @@ Public Function FindAll(ByVal query As stdICallable, optional byval searchType a
     Call BindGlobals(query)
 
     'Initialise collection
-    set FindAll = new Collection
+    Dim oRet as collection
+    set oRet = new Collection
 
     'Loop over the stack/array
     While length > 0 And index < length
@@ -527,14 +540,14 @@ Public Function FindAll(ByVal query As stdICallable, optional byval searchType a
                     next
                 Case EAccFindResult.MatchFound, True
                     'Found, add element
-                    Call FindAll.add(.element)
+                    Call oRet.add(.element)
                 Case EAccFindResult.NoMatchCancelSearch
                     'Nothing found, cancel function
-                    Exit Function
+                    GoTo ExitFunction
                 Case EAccFindResult.NoMatchSkipDescendents
                     'Nothing found, don't search descendents
                 Case EAccFindResult.MatchFoundSearchDescendents
-                    Call FindAll.add(.element)
+                    Call oRet.add(.element)
                     for each child in .element.children
                         Call stackPushV(stack,length,CreateFindNode(.depth+1,child))
                     next
@@ -543,6 +556,12 @@ Public Function FindAll(ByVal query As stdICallable, optional byval searchType a
         'Just make sure no freezing occurs
         DoEvents
     Wend
+ExitFunction:
+#if stdFullIntegration then
+    set FindAll = stdEnumerator.CreateFromIEnumVariant(oRet)
+#else
+    set FindAll = oRet
+#end if
 End Function
 
 'Return the parent of the IAccessible object
@@ -563,9 +582,19 @@ End Property
 
 'Return the children of the IAccessible object
 '@returns {Collection<stdAcc>} Children of this element
+#if stdFullIntegration then
+Public Property Get children() as stdEnumerator
+#else
 Public Property Get children() As Collection
+#end if
+
     On Error GoTo ErrorHandler
-        Set children = getChildrenAsIAcc()
+        #if stdFullIntegration then
+            set children = stdEnumerator.CreateFromIEnumVariant(getChildrenAsIAcc())
+        #else
+            Set children = getChildrenAsIAcc()
+        #end if
+        
     On Error GoTo 0
     Exit Property
 ErrorHandler:

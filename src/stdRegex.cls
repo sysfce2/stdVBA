@@ -351,7 +351,11 @@ End Function
 '    * 62346-STZ9
 'Result:
 '    [{0: "12345-STA1", ...}, {0: "12323-STB9", ...}, {0: "23565-STC2", ...}, {0: "62346-STZ9", ...}]
+#if stdFullIntegration then
+Public Function MatchAll(ByVal sHaystack As String) As stdEnumerator
+#else
 Public Function MatchAll(ByVal sHaystack As String) As Collection
+#end if
   If Me Is stdRegex Then
     stdError.Raise ("Method called on class not object")
     Exit Function
@@ -397,7 +401,12 @@ Public Function MatchAll(ByVal sHaystack As String) As Collection
   Next
 
   'Return data
-  Set MatchAll = oRet
+  #if stdFullIntegration then
+    set MatchAll = stdEnumerator.CreateFromIEnumVariant(oRet)
+  #else
+    Set MatchAll = oRet
+  #end if
+  
 End Function
 
 

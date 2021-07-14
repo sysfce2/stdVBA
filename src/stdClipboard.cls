@@ -303,7 +303,11 @@ End Function
 'Obtain the available formats as a Collection of strings
 '@returns {Collection} The format names you can use for the current clipboard data.
 '@see stdClipboard::formatIDs() to get ids used in Value() from these data.
+#if stdFullIntegration then
+Public Property Get formats() As stdEnumerator
+#else
 Public Property Get formats() As Collection
+#end if
   Dim iFormat As CLIPFORMAT: iFormat = CF_NOFORMAT
   Dim ret As Collection: Set ret = New Collection
   'Loop over all formats and add to collection
@@ -318,13 +322,21 @@ Public Property Get formats() As Collection
   Loop
   Call CloseClipboard
   
-  Set formats = ret
+  #if stdFullIntegration then
+    Set formats = stdEnumerator.CreateFromIEnumVariant(ret)
+  #else
+    Set formats = ret
+  #end if
 End Property
 
 'Obtain the available format IDs which can be used with value() function
 '@returns {Collection} Formats allowed. We use Collection for easy enumeration with stdEnumerator.
 '@see stdClipboard::formats() to get the corresponding names from these data.
+#if stdFullIntegration then
+Public Property Get formatIDs() As stdEnumerator
+#else
 Public Property Get formatIDs() As Collection
+#end if
   Dim iFormat As CLIPFORMAT: iFormat = CF_NOFORMAT
   Dim ret As Collection: Set ret = New Collection
   'Loop over all formats and add to collection
@@ -338,8 +350,12 @@ Public Property Get formatIDs() As Collection
     End If
   Loop
   Call CloseClipboard
-  
-  Set formatIDs = ret
+
+  #if stdFullIntegration then
+    Set formatIDs = stdEnumerator.CreateFromIEnumVariant(ret)
+  #else
+    Set formatIDs = ret
+  #end if
 End Property
 
 'Get or set the clipboard as/to an IPicture object
@@ -380,14 +396,29 @@ Public Property Set XLPicture(ByVal xlPic As Excel.IPicture)
 End Property
 
 'Get or Set the clipboard to a selection of files paths. Paths provided as a collection for easy stdEnumerator wrapping.
+#if stdFullIntegration then
+Public Property Get files() As stdEnumerator
+#else
 Public Property Get files() As Collection
-  Set files = New Collection
+#end if
   Dim sFiles() As String: sFiles = protGetFilesArr()
-  Dim i As Long: For i = LBound(sFiles) To UBound(sFiles)
-    files.Add sFiles(i)
-  Next
+  #if stdFullIntegration then
+    Set files = stdEnumerator.CreateFromArray(sFiles)
+  #else
+    Set files = New Collection
+    Dim i As Long: For i = LBound(sFiles) To UBound(sFiles)
+      files.Add sFiles(i)
+    Next
+  #end if
 End Property
+#if stdFullIntegration then
+Public Property Set files(ByVal vFiles As stdEnumerator)
+#else
 Public Property Set files(ByVal vFiles As Collection)
+#end if
+  #if stdFullIntegration then
+    set vFiles = vFiles.asCollection()
+  #end if
   Dim sFiles As String, vFile As Variant
   For Each vFile In vFiles
     sFiles = sFiles & vFile & vbNullChar

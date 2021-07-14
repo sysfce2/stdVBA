@@ -371,8 +371,11 @@ UnknownError:
 End Property
 
 
-
+#if stdFullIntegration then
+Public Property Get InterfaceInfo() As stdEnumerator
+#else
 Public Property Get InterfaceInfo() As Collection
+#end if
   Static pInterfaceInfo As Collection
   If pInterfaceInfo Is Nothing Then
     'Wrap pTypeInfo in stdCOM
@@ -422,14 +425,22 @@ Public Property Get InterfaceInfo() As Collection
     Next
     Set pInterfaceInfo = oRet
   End If
+  #if stdFullIntegration then
+    Set InterfaceInfo = stdEnumerator.CreateFromIEnumVariant(pInterfaceInfo)
+  #else
+    Set InterfaceInfo = pInterfaceInfo
+  #end if
   
-  Set InterfaceInfo = pInterfaceInfo
   Exit Property
 UnknownError:
   Set InterfaceInfo = Nothing
 End Property
 
+#if stdFullIntegration then
+Public Property Get Methods() As stdEnumerator
+#else
 Public Property Get Methods() As Collection
+#end if
   Static oMethods As Collection
   If oMethods Is Nothing Then
     Set oMethods = New Collection
@@ -440,10 +451,18 @@ Public Property Get Methods() As Collection
       End If
     Next
   End If
-  Set Methods = oMethods
+  #if stdFullIntegration then
+    Set Methods = stdEnumerator.CreateFromIEnumVariant(oMethods)
+  #else
+    Set Methods = oMethods
+  #end if
 End Property
 
+#if stdFullIntegration then
+Public Property Get Properties() As stdEnumerator
+#else
 Public Property Get Properties() As Collection
+#end if
   Static oProperties As Collection
   If oProperties Is Nothing Then
     Set oProperties = New Collection
@@ -457,7 +476,12 @@ Public Property Get Properties() As Collection
     Next
   End If
 
-  Set Properties = oProperties
+  #if stdFullIntegration then
+    Set Properties = stdEnumerator.CreateFromIEnumVariant(oProperties)
+  #else
+    Set Properties = oProperties
+  #end if
+  
 End Property
 
 
