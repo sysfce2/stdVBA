@@ -573,14 +573,14 @@ Returns a vertical tab character
 Creates and returns a `stdLambda` object which will execute the supplied equation body, when run.
 
 ```vb
-Debug.Print stdLambda.Create("1+3*8/2*(2+2+3)").Execute()
+Debug.Print stdLambda.Create("1+3*8/2*(2+2+3)").Run()
 With stdLambda.Create("$1+1+3*8/2*(2+2+3)")
-    Debug.Print .Execute(10)
-    Debug.Print .Execute(15)
-    Debug.Print .Execute(20)
+    Debug.Print .Run(10)
+    Debug.Print .Run(15)
+    Debug.Print .Run(20)
 End With
-Debug.Print stdLambda.Create("$1.Range(""A1"")").Execute(Sheets(1)).Address(True, True, xlA1, True)
-Debug.Print stdLambda.Create("$1.join("","")").Execute(stdArray.Create(1,2))
+Debug.Print stdLambda.Create("$1.Range(""A1"")").Run(Sheets(1)).Address(True, True, xlA1, True)
+Debug.Print stdLambda.Create("$1.join("","")").Run(stdArray.Create(1,2))
 ```
 
 Use `bUsePerformanceCache` when looping over a large dataset (e.g. many rows of a table) and filtering on something very specific with little variance. Example:
