@@ -281,19 +281,21 @@ Private Type KeyToken
 End Type
 
 'Used by SendInput() to send keys to window
-Private Type KeyboardInput
-  iType As Long    'DWORD = INPUT_KEYBOARD
-  wVk As Integer   'WORD
-  wScan As Integer 'WORD
-  dwFlags As Long  'DWORD
-  time As Long     'DWORD
-  #If VBA7 Then    'ULONG_PTR
+Private Type KeyboardInputEx
+  wVk As Integer            'WORD
+  wScan As Integer          'WORD
+  dwFlags As Long           'DWORD
+  time As Long              'DWORD
+  #If VBA7 Then             'ULONG_PTR
     dwExtraInfo As LongPtr
-    bPadding(1 To 12) As Byte '   12 extra bytes, because mouses take more.
   #Else
     dwExtraInfo As Long
-    bPadding(1 To 8) As Byte '   8 extra bytes, because mouses take more.
   #End If
+  padding As Currency
+End Type
+Private Type KeyboardInput
+  InputType As Long        'DWORD = INPUT_KEYBOARD
+  ki As KeyboardInputEx
 End Type
 '========================================
 
@@ -446,7 +448,7 @@ End Enum
   'SendKeys
   Private Declare PtrSafe Function MapVirtualKeyA Lib "user32" (ByVal uCode As Long, ByVal uMapType As Long) As Long
   Private Declare PtrSafe Sub keybd_event Lib "user32" (ByVal bVK As Byte, ByVal bScan As Byte, ByVal dwFlags As Long, ByVal dwExtraInfo As LongPtr)
-  Private Declare PtrSafe Function SendInput Lib "user32" (ByVal cInputs As Long, ByRef pInput As KeyboardInput, ByVal cbSize As Long) As Long
+  Private Declare PtrSafe Function SendInput Lib "user32" (ByVal cInputs As Long, ByRef pInput As KeyboardInput, ByVal cbSize As Integer) As Long
   Private Declare PtrSafe Function GetMessageExtraInfo Lib "user32" () As LongPtr
   Private Declare PtrSafe Sub Sleep Lib "Kernel32" (ByVal dwMilliseconds As Long)
 #Else
@@ -513,7 +515,7 @@ End Enum
   'SendKeys
   Private Declare Function MapVirtualKeyA Lib "user32" (ByVal uCode As Long, ByVal uMapType As Long) As Long
   Private Declare Sub keybd_event Lib "user32" (ByVal bVK As Byte, ByVal bScan As Byte, ByVal dwFlags As Long, ByVal dwExtraInfo As LongPtr)
-  Private Declare Function SendInput Lib "user32" (ByVal cInputs As Long, ByRef pInput As KeyboardInput, ByVal cbSize As Long) As Long
+  Private Declare Function SendInput Lib "user32" (ByVal cInputs As Long, ByRef pInput As KeyboardInput, ByVal cbSize As Integer) As Long
   Private Declare Function GetMessageExtraInfo Lib "user32" () As LongPtr
   Private Declare Sub Sleep Lib "Kernel32" (ByVal dwMilliseconds As Long)
 #End If
@@ -699,6 +701,18 @@ Public Function CreateManyFromProcessId(ByVal processID As Long) As Collection
     end if
   Next
   Set CreateManyFromProcessId = ret
+End Function
+
+'Create window objects for all shell windows
+'@constructor
+'@returns Collection<stdWindow> - Collection of shell windows
+Public Function CreateManyFromShellWindows() as Collection
+  set CreateManyFromShellWindows = new Collection
+  Dim shell: set shell = CreateObject("Shell.Application")
+  Dim win as object
+  For each win in shell.windows
+    CreateManyFromShellWindows.add CreateFromHwnd(win.hwnd)
+  next
 End Function
 
 'Converts a stdWindow object to a stdAcc object
@@ -1529,6 +1543,21 @@ Public Property Let Opacity(ByVal v As Byte)
   Call SetLayeredWindowAttributes(This.Handle, This.LayeredWindowInfo.crKey, This.LayeredWindowInfo.bAlpha, newFlags)
 End Property
 
+'Gets the Shell Window COM object for this window if it exists
+'@returns Object<Shell.IWebBrowser2|Nothing> - Shell Window COM object
+'@example ```
+'  Dim location as string: location = stdWindow.CreateFromHwnd(hwnd).ShellWindow.LocationURL
+'```
+'@TODO: is there a better way?
+Public Property Get ShellWindow() as Object
+  if Class = "CabinetWClass" then
+    With stdWindow.protGetShellWindowCache(This.Handle)
+      if .exists(CStr(This.Handle)) then
+        set ShellWindow = .item(CStr(This.Handle))
+      end if
+    end with
+  end if
+End Property
 
 '================================================================================================
 '=      PUBLIC INSTANCE METHODS
@@ -1947,8 +1976,9 @@ End Sub
 '@param bRaw - Whether to ignore special chars or not e.g. `{Enter}`
 '@param keyDelay - Delay between each keystroke
 '@param bAutoRelease - Whether keys pressed down should be auto-released
-'@example `notepadWindow.sendKeysInput("^a")`
-'@TODO: requires fix on 32-bit(?)
+'@example ```
+'Call stdWindow.CreateFromHwnd(Application.VBE.mainwindow.hwnd).SendKeysInput("^a")
+'```
 Public Sub SendKeysInput(ByVal sKeys As String, Optional ByVal bRaw As Boolean = False, Optional ByVal keyDelay As Long = 0, Optional bAutoRelease As Boolean = True)
   Const INPUT_KEYBOARD As Long = 1
   Const KEYEVENTF_KEYUP = &H2
@@ -1963,14 +1993,14 @@ Public Sub SendKeysInput(ByVal sKeys As String, Optional ByVal bRaw As Boolean =
         
         'Create generic key signal
         Dim inputKey As KeyboardInput
-        inputKey.iType = INPUT_KEYBOARD
-        inputKey.wVk = key.wVirtualKey
-        inputKey.wScan = key.wScanCode
-        inputKey.time = 0
+        inputKey.InputType = INPUT_KEYBOARD
+        inputKey.ki.wVk = key.wVirtualKey
+        inputKey.ki.wScan = key.wScanCode
+        inputKey.ki.time = 0
         
         'Key down input
         If key.iKeyState = tap Or key.iKeyState = down Then
-          inputKey.dwFlags = 0
+          inputKey.ki.dwFlags = 0
           If SendInput(1, inputKey, LenB(inputKey)) = 0 Then
               Err.Raise Err.LastDllError, "SendKeysInput", "Input might be blocked by another thread (DLL Error: " & Err.LastDllError & ")"
           End If
@@ -1979,7 +2009,7 @@ Public Sub SendKeysInput(ByVal sKeys As String, Optional ByVal bRaw As Boolean =
         
         'Key up input
         If key.iKeyState = tap Or key.iKeyState = up Then
-          inputKey.dwFlags = KEYEVENTF_KEYUP
+          inputKey.ki.dwFlags = KEYEVENTF_KEYUP
           If SendInput(1, inputKey, LenB(inputKey)) = 0 Then
               Err.Raise Err.LastDllError, "SendKeysInput", "Input might be blocked by another thread (DLL Error: " & Err.LastDllError & ")"
           End If
@@ -2098,7 +2128,31 @@ End Function
 '=      PROTECTED METHODS
 '================================================================================================
 
+'Obtain a shell window cache
+'@protected
+'@param hwnd - Handle of the window to test for in the cache. If this window is not in the cache, the cache will be updated.
+'@returns - Shell window cache
+#if VBA7 then
+  Friend Function protGetShellWindowCache(ByVal hwnd as LongPtr) as object
+#else
+  Friend Function protGetShellWindowCache(ByVal hwnd as Long) as object
+#end if
+  Static cache As Object: If cache Is Nothing Then Set cache = CreateObject("Scripting.Dictionary")
+  If Not cache.Exists(CStr(hwnd)) Then
+    Static shell As Object: If shell Is Nothing Then Set shell = CreateObject("Shell.Application")
+
+    Dim win
+    For Each win In shell.windows
+      If Not cache.Exists(CStr(win.hwnd)) Then
+        cache.Add CStr(win.hwnd), win
+      End If
+    Next
+  End If
+  Set protGetShellWindowCache = cache
+End Function
+
 'Obtain the next window given a stack
+'@protected
 '@param stack - Stack of windows
 '@param DFS - Whether to use Depth First Search or not
 '@param Prev - Previous window
@@ -2127,6 +2181,7 @@ Friend Function protGetNextDescendent(ByVal stack As collection, ByVal DFS As Bo
 End Function
 
 'Returns the lookups object
+'@protected
 '@returns Object<Dictionary<Dictionary<Dictionary<string|long>>>> - Lookups object
 Friend Function protGetLookups() as Object
     If This.Lookups Is Nothing Then

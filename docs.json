@@ -3425,35 +3425,6 @@
         "remarks": []
       },
       {
-        "name": "CreateEvaluator",
-        "type": "Function",
-        "constructor": true,
-        "isDefaultMember": false,
-        "protected": false,
-        "access": null,
-        "description": "CreateEvaluator from",
-        "params": [
-          {
-            "name": "sFormula",
-            "type": "String",
-            "description": "The formula to create the callback from.",
-            "referenceType": "ByVal",
-            "paramArray": false,
-            "optional": false,
-            "defaultValue": null
-          }
-        ],
-        "returns": {
-          "description": "A 1st class callback function object"
-        },
-        "deprecation": {
-          "status": false,
-          "message": ""
-        },
-        "examples": [],
-        "remarks": []
-      },
-      {
         "name": "CreateFromPointer",
         "type": "Function",
         "constructor": true,
@@ -6750,7 +6721,7 @@
           "message": ""
         },
         "examples": [
-          "```\r\n  Dim b() as Byte: Redim b(1 to 100)\r\n  Call stdImage.CreateFromBinary(b).saveAs(\"H:\\test1.png\", stdImgFormatPNG)\r\n```"
+          "```\r\n  Dim b() as Byte: Redim b(1 to 100)\r\n  Call stdImage.CreateFromBinary(b).ToFile(\"H:\\test1.png\")\r\n```"
         ],
         "remarks": []
       },
@@ -6829,7 +6800,7 @@
           "message": ""
         },
         "examples": [
-          "`stdImage.CreateFromFile(\"H:\\test1.bmp\").saveAs(\"H:\\test1.png\", stdImgFormatPNG)`"
+          "`stdImage.CreateFromFile(\"H:\\test1.bmp\").ToFile(\"H:\\test1.png\")`"
         ],
         "remarks": []
       },
@@ -6869,7 +6840,7 @@
           "message": ""
         },
         "examples": [
-          "`stdImage.CreateFromURL(\"https://raw.githubusercontent.com/sancarn/awesome-vba/main/resources/VBALogo.png\").saveAs(\"H:\\test.png\", stdImgFormatPNG)`"
+          "`stdImage.CreateFromURL(\"https://raw.githubusercontent.com/sancarn/awesome-vba/main/resources/VBALogo.png\").ToFile(\"H:\\test.png\", stdImgFormatPNG)`"
         ],
         "remarks": [
           "- TODO: consider removing"
@@ -6902,7 +6873,7 @@
           "message": ""
         },
         "examples": [
-          "```\r\n  stdImage.CreateFromHBitmap(Image1.Picture.Handle).saveAs(\"H:\\test.png\", stdImgFormatPNG)\r\n```"
+          "```\r\n  stdImage.CreateFromHBitmap(Image1.Picture.Handle).ToFile(\"H:\\test.png\", stdImgFormatPNG)\r\n```"
         ],
         "remarks": []
       },
@@ -6923,7 +6894,7 @@
           "message": ""
         },
         "examples": [
-          "`stdImage.CreateFromClipboard().saveAs(\"H:\\test.png\", stdImgFormatPNG)`"
+          "`stdImage.CreateFromClipboard().ToFile(\"H:\\test.png\", stdImgFormatPNG)`"
         ],
         "remarks": []
       },
@@ -6985,7 +6956,7 @@
           "message": ""
         },
         "examples": [
-          "`stdImage.CreateFromStdPicture(Userform1.Picture).saveAs(\"H:\\test.png\", stdImgFormatPNG)`"
+          "`stdImage.CreateFromStdPicture(Userform1.Picture).ToFile(\"H:\\test.png\", stdImgFormatPNG)`"
         ],
         "remarks": []
       },
@@ -7078,7 +7049,7 @@
           "message": ""
         },
         "examples": [
-          "`stdImage.CreateFromShape(Sheet1.Shapes(\"Picture 2\")).saveAs(\"H:\\test.png\")`"
+          "`stdImage.CreateFromShape(Sheet1.Shapes(\"Picture 2\")).ToFile(\"H:\\test.png\")`"
         ],
         "remarks": []
       },
@@ -7109,7 +7080,7 @@
           "message": ""
         },
         "examples": [
-          "`stdImage.CreateFromChart(Sheet1.ChartObjects(1).Chart).saveAs(\"H:\\test.png\")`"
+          "`stdImage.CreateFromChart(Sheet1.ChartObjects(1).Chart).ToFile(\"H:\\test.png\")`"
         ],
         "remarks": []
       },
@@ -7179,12 +7150,12 @@
         "isDefaultMember": false,
         "protected": false,
         "access": null,
-        "description": "",
+        "description": "Creates a stdImage object from a HICON",
         "params": [
           {
             "name": "hIcon",
             "type": "LongPtr",
-            "description": "",
+            "description": "Handle to icon",
             "referenceType": "ByVal",
             "paramArray": false,
             "optional": false,
@@ -7192,14 +7163,15 @@
           }
         ],
         "returns": {
-          "type": "stdImage",
-          "description": ""
+          "description": "Picture object representing data"
         },
         "deprecation": {
           "status": false,
           "message": ""
         },
-        "examples": [],
+        "examples": [
+          "```\r\nDim hICON as LongPtr: hICON = stdWindow.CreateFromHwnd(Application.hWnd).HICON\r\nstdImage.CreateFromHICON(hICON).ToFile(\"H:\\test.png\", stdImgFormatPNG)\r\n```"
+        ],
         "remarks": []
       },
       {
@@ -7697,7 +7669,10 @@
           "status": false,
           "message": ""
         },
-        "examples": [],
+        "examples": [
+          "```\r\n  Dim o as stdJSON: set o = stdJSON.CreateFromString(\"{\"\"a\"\":1,\"\"b\"\":\"\"hello\"\"}\")\r\n  Debug.Print o.ToString()\r\n```",
+          "```\r\n  Dim o as stdJSON: set o = stdJSON.CreateFromString(\"{a: 1, b: 'hello'}\", AllowUnquotedKeys:=true, AllowSingleQuoteStrings:=true)\r\n  Debug.Print o.ToString()\r\n```"
+        ],
         "remarks": []
       },
       {
@@ -9869,6 +9844,545 @@
     ]
   },
   {
+    "name": "stdSentry",
+    "fileName": "stdSentry.cls",
+    "methods": [
+      {
+        "name": "Create",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create a sentry factory",
+        "params": [
+          {
+            "name": "OnInit",
+            "type": "stdICallable",
+            "description": "Function to run when the sentry is created.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "OnDestroy",
+            "type": "stdICallable",
+            "description": "Function to run when the sentry is destroyed.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "passVars",
+            "type": "boolean",
+            "description": "If true, the result of OnInit is passed to OnDestroy. If false, no arguments are passed to OnDestroy.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": true,
+            "defaultValue": "true"
+          }
+        ],
+        "returns": {
+          "description": "The sentry factory"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "CreateOptimiser",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create a sentry which acts as an \"optimiser\" for code. Note, setting options doesn't always lead to performance improvements. See [vba-articles performance thread](https://sancarn.github.io/vba-articles/performance-tips.html) for details.",
+        "params": [
+          {
+            "name": "EnableEvents",
+            "type": "vbTriState",
+            "description": "If not Empty, sets Application.EnableEvents to this value. If Empty, Application.EnableEvents remains unchanged.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": true,
+            "defaultValue": "vbUseDefault"
+          },
+          {
+            "name": "ScreenUpdating",
+            "type": "vbTriState",
+            "description": "If not Empty, sets Application.ScreenUpdating to this value. If Empty, Application.ScreenUpdating remains unchanged.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": true,
+            "defaultValue": "vbUseDefault"
+          },
+          {
+            "name": "Calculation",
+            "type": "Long",
+            "description": "If not -1, sets Application.Calculation to this value. If -1, Application.Calculation remains unchanged.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": true,
+            "defaultValue": "-1"
+          }
+        ],
+        "returns": {
+          "description": "A sentry which will restore the original settings when destroyed."
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [
+          "```vba\r\nWith stdSentry.CreateOptimiser(ScreenUpdating:=False, Calculation:=xlCalculationManual)\r\n  '... heavy range based operations ...\r\nEnd With\r\n```"
+        ],
+        "remarks": []
+      },
+      {
+        "name": "CreateFromObjectProperty",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create a sentry from a property of an object",
+        "params": [
+          {
+            "name": "obj",
+            "type": "Object",
+            "description": "Object to bind the property to",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "sPropertyName",
+            "type": "String",
+            "description": "Name of the property to bind",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "value",
+            "type": "Variant",
+            "description": "Value to set the property to",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [
+          "```vba\r\nWith stdSentry.CreateFromObjectProperty(Application, \"DisplayAlerts\", false)\r\n  Call ThisWorkbook.SaveAs(\"C:\\temp\\test.xlsx\")\r\nEnd With\r\n```"
+        ],
+        "remarks": []
+      },
+      {
+        "name": "CreateFromObjectMethod",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create a sentry from a method of an object",
+        "params": [
+          {
+            "name": "obj",
+            "type": "Object",
+            "description": "Object to bind the method to",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "OnInitName",
+            "type": "String",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "initParams",
+            "type": "Variant",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "OnDestroyName",
+            "type": "String",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "destroyParams",
+            "type": "variant",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [
+          "```vba\r\nWith stdSentry.CreateFromObjectMethod(stdError, \"AddStack\", Array(\"MethodName\"), \"PopStack\", Array())\r\n  '... our code ...\r\nEnd With\r\n```"
+        ],
+        "remarks": []
+      },
+      {
+        "name": "CreateErrorStack",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create a sentry for error stack management",
+        "params": [
+          {
+            "name": "name",
+            "type": "String",
+            "description": "Name of the stack to add",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [
+          "```vba\r\nPublic Sub MyMethod()\r\n  With stdSentry.CreateErrorStack(\"MyClass.MyMethod\")\r\n    '... our code ...\r\n  End With\r\nEnd Sub\r\n```"
+        ],
+        "remarks": []
+      },
+      {
+        "name": "CreateFromAutomationSecurity",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create a sentry from an AutomationSecurity setting",
+        "params": [
+          {
+            "name": "sec",
+            "type": "MsoAutomationSecurity",
+            "description": "AutomationSecurity setting desired",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [
+          "```vba\r\nWith stdSentry.CreateFromAutomationSecurity(msoAutomationSecurityForceDisable)\r\n  Call ThisWorkbook.SaveAs(\"C:\\temp\\test.xlsx\")\r\nEnd With\r\n```"
+        ],
+        "remarks": []
+      },
+      {
+        "name": "protInitFactory",
+        "type": "Sub",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "@param OnInit - Function to run when the sentry is created. Should return arguments to pass to OnDestroy. If OnInit returns Empty, no arguments are passed to OnDestroy.",
+        "params": [
+          {
+            "name": "OnInit",
+            "type": "stdICallable",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "OnDestroy",
+            "type": "stdICallable",
+            "description": "Function to run when the sentry is destroyed. Should take the arguments returned by OnInit.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "passVars",
+            "type": "boolean",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "type": "Void",
+          "description": ""
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "protInitInstance",
+        "type": "Sub",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "",
+        "params": [
+          {
+            "name": "onDestroy",
+            "type": "stdICallable",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "args",
+            "type": "Variant",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "passVars",
+            "type": "boolean",
+            "description": "",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "type": "Void",
+          "description": ""
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "Run",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Run the sentry",
+        "params": [
+          {
+            "name": "args",
+            "type": "Variant",
+            "description": "Arguments to pass to the OnInit function",
+            "referenceType": "ByRef",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "RunEx",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Run the sentry",
+        "params": [
+          {
+            "name": "args",
+            "type": "Variant",
+            "description": "Arguments to pass to the OnInit function",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "Bind",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Bind arguments to the sentry factory",
+        "params": [
+          {
+            "name": "args",
+            "type": "Variant",
+            "description": "Arguments to bind to the sentry",
+            "referenceType": "ByRef",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "BindEx",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Bind arguments to the sentry factory",
+        "params": [
+          {
+            "name": "args",
+            "type": "Variant<Array<Variant>>",
+            "description": "Arguments to bind to the sentry",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "The sentry"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
+        "name": "SendMessage",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Making late-bound calls to `stdSentry` members. Each object which implements `stdICallable`\r\nwill support a different set of latebound calls.",
+        "params": [
+          {
+            "name": "sMessage",
+            "type": "string",
+            "description": "Message to send. Standard messages include \"obj\" returning the object, \"className\" returning the class name. Other messages are implementation specific.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "success",
+            "type": "boolean",
+            "description": "Whether the call was successful",
+            "referenceType": "ByRef",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          },
+          {
+            "name": "params",
+            "type": "variant",
+            "description": "Any variant, typically parameters as an array. Passed along with the message.",
+            "referenceType": "ByVal",
+            "paramArray": false,
+            "optional": false,
+            "defaultValue": null
+          }
+        ],
+        "returns": {
+          "description": "Any return value."
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      }
+    ]
+  },
+  {
     "name": "stdTimer",
     "fileName": "stdTimer.cls",
     "methods": [
@@ -10976,6 +11490,26 @@
         "remarks": []
       },
       {
+        "name": "CreateManyFromShellWindows",
+        "type": "Function",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": null,
+        "description": "Create window objects for all shell windows",
+        "params": [],
+        "returns": {
+          "type": "Collection<stdWindow> ",
+          "description": "Collection of shell windows"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [],
+        "remarks": []
+      },
+      {
         "name": "AsAcc",
         "type": "Function",
         "constructor": true,
@@ -12034,6 +12568,28 @@
         ]
       },
       {
+        "name": "ShellWindow",
+        "type": "Property",
+        "constructor": true,
+        "isDefaultMember": false,
+        "protected": false,
+        "access": "ReadOnly",
+        "description": "Gets the Shell Window COM object for this window if it exists",
+        "params": [],
+        "returns": {
+          "type": "Object<Shell.IWebBrowser2|Nothing> ",
+          "description": "Shell Window COM object"
+        },
+        "deprecation": {
+          "status": false,
+          "message": ""
+        },
+        "examples": [
+          "```\r\n  Dim location as string: location = stdWindow.CreateFromHwnd(hwnd).ShellWindow.LocationURL\r\n```"
+        ],
+        "remarks": []
+      },
+      {
         "name": "SetHook",
         "type": "Function",
         "constructor": true,
@@ -12519,7 +13075,7 @@
           "message": ""
         },
         "examples": [
-          "`notepadWindow.sendKeysInput(\"^a\")`"
+          "```\r\nCall stdWindow.CreateFromHwnd(Application.VBE.mainwindow.hwnd).SendKeysInput(\"^a\")\r\n```"
         ],
         "remarks": []
       },
