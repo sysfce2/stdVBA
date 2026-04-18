@@ -45,7 +45,7 @@ Option Explicit
     Private Const PTR_SZ As Long = 4
 #End If
 
-#If VBA7 = 0 then
+#If VBA7 = 0 Then
     Private Enum LongPtr
         [_]
     End Enum
@@ -91,6 +91,10 @@ Private Type TScriptState
     result As String
     syncDone As Boolean
     syncWaitRequestId As Long
+    syncBridgeRequestId As String
+    syncBridgeDone As Boolean
+    syncBridgeOk As Boolean
+    syncBridgePayload As String
     nextRequestId As Long
 End Type
 
@@ -127,6 +131,30 @@ Private Type TDeferredWebResources
     nextRequestId As Long
 End Type
 
+Private Type TCookieRecord
+    Name As String
+    Value As String
+    Domain As String
+    Path As String
+    ExpiresUtcSeconds As Double
+    IsSecure As Boolean
+    IsHttpOnly As Boolean
+    SameSite As Long
+    IsSession As Boolean
+End Type
+
+Private Type TCookieQueryState
+    requestId As Long
+    nextRequestId As Long
+    done As Boolean
+    errorCode As Long
+    records() As TCookieRecord
+    count As Long
+    pHandlerObj As LongPtr
+    pVTable As LongPtr
+    thunks As THandlerThunks
+End Type
+
 Private Type TComState
     pEnvironment As LongPtr
     pController As LongPtr
@@ -142,6 +170,11 @@ Private Type TComState
     webReqThunk As THandlerThunks
     webReqTokenLow As Long
     webReqTokenHigh As Long
+    pWebMsgHandlerObj As LongPtr
+    pWebMsgVTable As LongPtr
+    webMsgThunk As THandlerThunks
+    webMsgTokenLow As Long
+    webMsgTokenHigh As Long
 End Type
 
 Private Type TThis
@@ -153,6 +186,7 @@ Private Type TThis
     host As THostObjectState
     webResource As TWebResourceFilters
     deferredWebResource As TDeferredWebResources
+    cookie As TCookieQueryState
     com As TComState
 End Type
 
@@ -310,6 +344,38 @@ Private Const COREWEBVIEW2WEBRESOURCEREQUESTEDEVENTARGS_VTBL_PUT_RESPONSE As Lon
 Private Const COREWEBVIEW2WEBRESOURCEREQUESTEDEVENTARGS_VTBL_GETDEFERRAL As Long = 6
 Private Const COREWEBVIEW2WEBRESOURCEREQUESTEDEVENTARGS_VTBL_GET_RESOURCECONTEXT As Long = 7
 Private Const COREWEBVIEW2DEFERRAL_VTBL_COMPLETE As Long = 3
+Private Const COREWEBVIEW2WEBMESSAGERECEIVEDEVENTARGS_VTBL_GET_WEBMESSAGEASJSON As Long = 4
+
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_CREATECOOKIE As Long = 3
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_COPYCOOKIE As Long = 4
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_GETCOOKIES As Long = 5
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_ADDORUPDATECOOKIE As Long = 6
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_DELETECOOKIE As Long = 7
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_DELETECOOKIES As Long = 8
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_DELETECOOKIESWITHDOMAINANDPATH As Long = 9
+Private Const COREWEBVIEW2COOKIEMANAGER_VTBL_DELETEALLCOOKIES As Long = 10
+
+Private Const COREWEBVIEW2COOKIELIST_VTBL_GET_COUNT As Long = 3
+Private Const COREWEBVIEW2COOKIELIST_VTBL_GETVALUEATINDEX As Long = 4
+
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_NAME As Long = 3
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_VALUE As Long = 4
+Private Const COREWEBVIEW2COOKIE_VTBL_PUT_VALUE As Long = 5
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_DOMAIN As Long = 6
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_PATH As Long = 7
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_EXPIRES As Long = 8
+Private Const COREWEBVIEW2COOKIE_VTBL_PUT_EXPIRES As Long = 9
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_ISHTTPONLY As Long = 10
+Private Const COREWEBVIEW2COOKIE_VTBL_PUT_ISHTTPONLY As Long = 11
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_SAMESITE As Long = 12
+Private Const COREWEBVIEW2COOKIE_VTBL_PUT_SAMESITE As Long = 13
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_ISSECURE As Long = 14
+Private Const COREWEBVIEW2COOKIE_VTBL_PUT_ISSECURE As Long = 15
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_ISSESSION As Long = 16
+Private Const COREWEBVIEW2COOKIE_VTBL_GET_ISEXPIRED As Long = 17
+
+Private Const SCRIPT_SYNC_BRIDGE_PREFIX As String = "__stdwv_sync__"
+Private Const SCRIPT_SYNC_TIMEOUT_MS As Long = 120000
 
 Public Enum COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND
     COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY = 0
@@ -335,6 +401,12 @@ Public Enum ECoreWebView2WebResourceContext
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_PING = 14
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_CSP_VIOLATION_REPORT = 15
     COREWEBVIEW2_WEB_RESOURCE_CONTEXT_OTHER = 16
+End Enum
+
+Public Enum ECoreWebView2CookieSameSite
+    COREWEBVIEW2_COOKIE_SAME_SITE_KIND_NONE = 0
+    COREWEBVIEW2_COOKIE_SAME_SITE_KIND_LAX = 1
+    COREWEBVIEW2_COOKIE_SAME_SITE_KIND_STRICT = 2
 End Enum
 
 #If VBA7 Then
@@ -519,7 +591,7 @@ Private Function PtrToStrW(ByVal pWStr As LongPtr) As String
     If pWStr = 0 Then Exit Function
     n = lstrlenW(pWStr)
     If n <= 0 Then Exit Function
-    buf = String$(n, vbNullChar)
+    buf = string$(n, vbNullChar)
     CopyMemory ByVal StrPtr(buf), ByVal pWStr, n * 2&
     PtrToStrW = buf
 End Function
@@ -531,7 +603,7 @@ End Function
 ' This is because the WebView2 handler vtables (IUnknown + Invoke)
 ' depend on the order of the Public methods.
 '
-' `GetComProcAddress(Me, 0..6)` depends on that. Do not move other Public methods
+' `GetComProcAddress(Me, 0..8)` depends on that. Do not move other Public methods
 ' above them without adjusting the indexes.
 ' ============================================================================
 
@@ -610,6 +682,34 @@ Public Function zzProtWebView_WebResourceRequestedInvoke( _
     zzProtWebView_WebResourceRequestedInvoke = 0&
 End Function
 
+'WebView2 WebMessageReceived Invoke Thunk Implementation. DO NOT CALL THIS METHOD.
+'@protected
+Public Function zzProtWebView_WebMessageReceivedInvoke( _
+    ByVal callbackThis As LongPtr, _
+    ByVal pSender As LongPtr, _
+    ByVal pArgs As LongPtr) As Long
+
+    On Error Resume Next
+    Call protWebMessageReceived(pSender, pArgs)
+    zzProtWebView_WebMessageReceivedInvoke = 0&
+End Function
+
+'WebView2 GetCookiesCompleted Invoke Thunk Implementation. DO NOT CALL THIS METHOD.
+'@protected
+Public Function zzProtWebView_GetCookiesInvoke( _
+    ByVal callbackThis As LongPtr, _
+    ByVal errorCode As Long, _
+    ByVal pCookieList As LongPtr) As Long
+
+    On Error Resume Next
+    Dim reqIdLP As LongPtr
+    Dim reqId As Long
+    Call CopyMemory(reqIdLP, ByVal callbackThis + PTR_SZ, PTR_SZ)
+    reqId = CLng(reqIdLP)
+    Call protCookiesCompleted(errorCode, pCookieList, reqId)
+    zzProtWebView_GetCookiesInvoke = 0&
+End Function
+
 ' ============================================================================
 
 'Create a stdWebView from a window handle.
@@ -656,6 +756,8 @@ End Function
 '@remark - Releases controller/environment state and frees COM handler allocations. Safe to call more than once.
 Public Sub Quit()
     On Error Resume Next
+    Call WebMessage_RemoveEventHandler
+    Call WebResource_RemoveEventHandler
     If This.com.pController <> 0 Then
         Call CallVTQuiet(This.com.pController, 24, vbLong)
     End If
@@ -674,6 +776,245 @@ Public Sub Navigate(ByVal url As String)
     If Not IsReady Then Err.Raise 5, "stdWebView::Navigate", "WebView not ready"
     Call CallVT(This.com.ppWebView2, 5, vbLong, StrPtr(url))
 End Sub
+
+'Get current page URL.
+'@returns - Current `CoreWebView2.Source`.
+'@remark - Raises if the WebView is not ready.
+Public Property Get Source() As String
+    Dim pSource As LongPtr
+    If Not IsReady Then Err.Raise 5, "stdWebView::Source [Get]", "WebView not ready"
+    Call CallVT(This.com.ppWebView2, COREWEBVIEW2_VTBL_GET_SOURCE, vbLong, VarPtr(pSource))
+    Source = PtrToStrW(pSource)
+    If pSource <> 0 Then Call CoTaskMemFree(pSource)
+End Property
+
+'Get/Let Address
+Public Property Get Address() As String
+    Address = Source
+End Property
+Public Property Let Address(v As String)
+    Navigate v
+End Property
+
+'Get a cookie value by URL/name, optionally narrowing by domain/path.
+Public Property Get Cookie( _
+    ByVal Url As String, _
+    ByVal Name As String) As String
+
+    Dim i As Long
+    Dim cookieName As String
+
+    cookieName = LCase$(Trim$(Name))
+    If LenB(cookieName) = 0 Then Err.Raise 5, "stdWebView::Cookie [Get]", "Name cannot be blank"
+    If LenB(Trim$(Url)) = 0 Then Err.Raise 5, "stdWebView::Cookie [Get]", "Url cannot be blank"
+
+    Call CookieQuery_LoadForUrl(Url)
+    For i = 0 To This.cookie.count - 1
+        If LCase$(This.cookie.records(i).Name) = cookieName Then
+            Cookie = This.cookie.records(i).Value
+            Exit Property
+        End If
+nextCookie:
+    Next i
+End Property
+
+'Set or update a cookie for the active WebView profile.
+Public Property Let Cookie( _
+    ByVal Url As String, _
+    ByVal Name As String, _
+    ByVal rhs As String)
+
+    Dim pCookieManager As LongPtr
+    Dim pCookie As LongPtr
+    Dim hr As Long
+    Dim cookieDomain As String
+    Dim cookiePath As String
+
+    If LenB(Trim$(Url)) = 0 Then Err.Raise 5, "stdWebView::Cookie [Let]", "Url cannot be blank"
+    If LenB(Trim$(Name)) = 0 Then Err.Raise 5, "stdWebView::Cookie [Let]", "Name cannot be blank"
+
+    cookieDomain = UrlHost(Url)
+    If LenB(cookieDomain) = 0 Then Err.Raise 5, "stdWebView::Cookie [Let]", "Domain could not be inferred from Url"
+
+    cookiePath = "/"
+
+    pCookieManager = CookieManager_GetPointer()
+    hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_CREATECOOKIE, vbLong, StrPtr(Name), StrPtr(rhs), StrPtr(cookieDomain), StrPtr(cookiePath), VarPtr(pCookie)))
+    If hr < 0 Or pCookie = 0 Then
+        Call ComRelease(pCookieManager)
+        Err.Raise IIf(hr < 0, hr, 5), "stdWebView::Cookie [Let]", "CreateCookie failed (" & CStr(hr) & ")"
+    End If
+
+    hr = CLng(CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_PUT_ISSECURE, vbLong, 1&))
+    If hr < 0 Then GoTo failSetCookie
+    hr = CLng(CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_PUT_ISHTTPONLY, vbLong, 1&))
+    If hr < 0 Then GoTo failSetCookie
+    hr = CLng(CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_PUT_SAMESITE, vbLong, CLng(COREWEBVIEW2_COOKIE_SAME_SITE_KIND_NONE)))
+    If hr < 0 Then GoTo failSetCookie
+
+    hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_ADDORUPDATECOOKIE, vbLong, pCookie))
+    If hr < 0 Then GoTo failSetCookie
+
+    Call ComRelease(pCookie)
+    Call ComRelease(pCookieManager)
+    Exit Property
+
+failSetCookie:
+    Call ComRelease(pCookie)
+    Call ComRelease(pCookieManager)
+    Err.Raise hr, "stdWebView::Cookie [Let]", "Failed setting cookie metadata (" & CStr(hr) & ")"
+End Property
+
+'Delete a cookie by name using URL scope or explicit domain/path.
+Public Sub CookieDelete( _
+    ByVal Url As String, _
+    ByVal Name As String, _
+    Optional ByVal Domain As String = vbNullString, _
+    Optional ByVal Path As String = vbNullString)
+
+    Dim pCookieManager As LongPtr
+    Dim hr As Long
+    Dim cookieDomain As String
+    Dim cookiePath As String
+
+    If LenB(Trim$(Name)) = 0 Then Err.Raise 5, "stdWebView::CookieDelete", "Name cannot be blank"
+    pCookieManager = CookieManager_GetPointer()
+
+    cookieDomain = Trim$(Domain)
+    cookiePath = Trim$(Path)
+    If LenB(cookieDomain) > 0 Or LenB(cookiePath) > 0 Then
+        If LenB(cookieDomain) = 0 Then
+            cookieDomain = UrlHost(Url)
+            If LenB(cookieDomain) = 0 Then
+                Call ComRelease(pCookieManager)
+                Err.Raise 5, "stdWebView::CookieDelete", "Domain could not be inferred from Url"
+            End If
+        End If
+        If LenB(cookiePath) = 0 Then cookiePath = "/"
+        hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_DELETECOOKIESWITHDOMAINANDPATH, vbLong, StrPtr(Name), StrPtr(cookieDomain), StrPtr(cookiePath)))
+    Else
+        If LenB(Trim$(Url)) = 0 Then
+            Call ComRelease(pCookieManager)
+            Err.Raise 5, "stdWebView::CookieDelete", "Url cannot be blank when Domain/Path are omitted"
+        End If
+        hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_DELETECOOKIES, vbLong, StrPtr(Name), StrPtr(Url)))
+    End If
+    Call ComRelease(pCookieManager)
+    If hr < 0 Then Err.Raise hr, "stdWebView::CookieDelete", "Delete cookie failed (" & CStr(hr) & ")"
+End Sub
+
+'Delete all cookies in scope (Url, Domain or full profile).
+Public Sub CookieDeleteAll(Optional ByVal Url As String = vbNullString, Optional ByVal Domain As String = vbNullString)
+    Dim pCookieManager As LongPtr
+    Dim i As Long
+    Dim hr As Long
+    Dim queryUrl As String
+    Dim filterDomain As String
+
+    pCookieManager = CookieManager_GetPointer()
+    queryUrl = Trim$(Url)
+    filterDomain = LCase$(Trim$(Domain))
+
+    If LenB(queryUrl) = 0 And LenB(filterDomain) = 0 Then
+        hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_DELETEALLCOOKIES, vbLong))
+        Call ComRelease(pCookieManager)
+        If hr < 0 Then Err.Raise hr, "stdWebView::CookieDeleteAll", "DeleteAllCookies failed (" & CStr(hr) & ")"
+        Exit Sub
+    End If
+
+    If LenB(queryUrl) = 0 Then queryUrl = "https://" & filterDomain & "/"
+    Call CookieQuery_LoadForUrl(queryUrl)
+    For i = 0 To This.cookie.count - 1
+        If LenB(filterDomain) > 0 Then
+            If LCase$(This.cookie.records(i).Domain) <> filterDomain Then GoTo nextCookie
+        End If
+        hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_DELETECOOKIESWITHDOMAINANDPATH, vbLong, StrPtr(This.cookie.records(i).Name), StrPtr(This.cookie.records(i).Domain), StrPtr(This.cookie.records(i).Path)))
+        If hr < 0 Then
+            Call ComRelease(pCookieManager)
+            Err.Raise hr, "stdWebView::CookieDeleteAll", "Failed deleting cookie '" & This.cookie.records(i).Name & "' (" & CStr(hr) & ")"
+        End If
+nextCookie:
+    Next i
+    Call ComRelease(pCookieManager)
+End Sub
+
+'Get cookie key/value pairs suitable for stdHTTP.CreateOptions(..., Cookies:=...).
+Public Function CookiesForRequest(ByVal Url As String) As Variant
+    Dim pairs() As Variant
+    Dim i As Long
+    Dim idx As Long
+
+    If LenB(Trim$(Url)) = 0 Then Err.Raise 5, "stdWebView::CookiesForRequest", "Url cannot be blank"
+    Call CookieQuery_LoadForUrl(Url)
+    If This.cookie.count <= 0 Then
+        CookiesForRequest = Array()
+        Exit Function
+    End If
+
+    ReDim pairs(0 To (This.cookie.count * 2) - 1)
+    idx = 0
+    For i = 0 To This.cookie.count - 1
+        pairs(idx) = This.cookie.records(i).Name
+        pairs(idx + 1) = This.cookie.records(i).Value
+        idx = idx + 2
+    Next i
+    CookiesForRequest = pairs
+End Function
+
+'Wait until current page is fully loaded and URL prefix is stable.
+'@param urlPrefix - Required URL prefix (case-insensitive). Comparison normalizes `http://` vs `https://` and a single leading `www.` on the host; actual navigation URLs are unchanged. Pass "" to skip URL matching.
+'@param timeoutMs - Max wait time in milliseconds.
+'@param stableMs - Consecutive milliseconds condition must remain true before success.
+'@param pollMs - Poll interval in milliseconds.
+'@returns - `True` when ready condition is satisfied within timeout, else `False`.
+Public Function WaitForDocumentReady( _
+    ByVal urlPrefix As String, _
+    Optional ByVal timeoutMs As Long = 120000, _
+    Optional ByVal stableMs As Long = 1000, _
+    Optional ByVal pollMs As Long = 200) As Boolean
+
+    Dim requiredPrefix As String
+    Dim startedAt As Double
+    Dim stableStart As Double
+    Dim readyState As String
+    Dim currentUrl As String
+    Dim isReadyNow As Boolean
+    Dim hasPrefix As Boolean
+
+    If Not IsReady Then Err.Raise 5, "stdWebView::WaitForDocumentReady", "WebView not ready"
+    requiredPrefix = UrlWaitPrefixNormalize(urlPrefix)
+    If timeoutMs < 0 Then timeoutMs = 0
+    If stableMs < 0 Then stableMs = 0
+    If pollMs < 1 Then pollMs = 1
+
+    startedAt = Timer
+    stableStart = -1#
+
+    Do
+        currentUrl = UrlWaitPrefixNormalize(Source)
+        hasPrefix = (LenB(requiredPrefix) = 0) Or (Left$(currentUrl, Len(requiredPrefix)) = requiredPrefix)
+
+        If hasPrefix Then
+            readyState = LCase$(Trim$(JsonUnquoteString(JavaScriptRunSync("(function(){try{return document.readyState||'';}catch(e){return '';}})()"))))
+            isReadyNow = (readyState = "complete")
+        Else
+            isReadyNow = False
+        End If
+
+        If isReadyNow Then
+            If stableStart < 0 Then stableStart = Timer
+            If TimerElapsedMs(stableStart, Timer) >= CDbl(stableMs) Then
+                WaitForDocumentReady = True
+                Exit Function
+            End If
+        Else
+            stableStart = -1#
+        End If
+
+        If TimerElapsedMs(startedAt, Timer) >= CDbl(timeoutMs) Then Exit Do
+        Call SpinWaitMs(pollMs)
+    Loop
+End Function
 
 'Nagivate backward
 '@remark - Navigates backward using injected `history.back()`.
@@ -709,25 +1050,49 @@ End Property
 '@returns - JSON-encoded result string returned by WebView2 script execution.
 '@remark - Blocks with DoEvents until completion. Only one synchronous run can be active at a time.
 Public Function JavaScriptRunSync(ByVal script As String) As String
+    Dim bridgeRequestId As String
+    Dim wrappedScript As String
+    Dim startedAt As Double
+    Dim elapsedMs As Double
+
     If Not IsReady Then Err.Raise 5, "stdWebView::JavaScriptRunSync", "WebView not ready"
     If This.script.syncWaitRequestId <> 0 Then
         Err.Raise 5, "stdWebView::JavaScriptRunSync", "A synchronous script call is already in progress"
     End If
     Call Scripts_ClearCompleted
+    Call WebMessage_EnsureEventHandler
     This.script.syncDone = False
     This.script.result = vbNullString
-    This.script.syncWaitRequestId = JavaScriptRunCore(script, Nothing, True)
+    bridgeRequestId = CStr(NextScriptRequestId())
+    wrappedScript = BuildSyncBridgeScript(script, bridgeRequestId)
+    Call ScriptSyncBridge_Reset
+    This.script.syncBridgeRequestId = bridgeRequestId
+    This.script.syncWaitRequestId = JavaScriptRunCore(wrappedScript, Nothing, False)
     If This.script.syncWaitRequestId = 0 Then
+        Call ScriptSyncBridge_Reset
         This.script.syncWaitRequestId = 0
         Err.Raise 5, "stdWebView::JavaScriptRunSync", "Failed to queue script execution"
     End If
+    startedAt = Timer
     Do
-        If This.script.syncDone Then Exit Do
+        If This.script.syncBridgeDone Then Exit Do
+        elapsedMs = TimerElapsedMs(startedAt, Timer)
+        If elapsedMs >= CDbl(SCRIPT_SYNC_TIMEOUT_MS) Then
+            This.script.syncWaitRequestId = 0
+            Call ScriptSyncBridge_Reset
+            Call Scripts_ClearCompleted
+            Err.Raise 5, "stdWebView::JavaScriptRunSync", "Timed out waiting for script result"
+        End If
         DoEvents
     Loop
     This.script.syncWaitRequestId = 0
     Call Scripts_ClearCompleted
-    JavaScriptRunSync = This.script.result
+    If This.script.syncBridgeOk Then
+        JavaScriptRunSync = This.script.syncBridgePayload
+    Else
+        Err.Raise 5, "stdWebView::JavaScriptRunSync", JsonUnquoteString(This.script.syncBridgePayload)
+    End If
+    Call ScriptSyncBridge_Reset
 End Function
 
 'Execute a JavaScript script asynchronously.
@@ -951,6 +1316,33 @@ Friend Sub protScriptCompleted(ByVal errorCode As Long, ByVal resultJson As Stri
     End If
 End Sub
 
+Friend Sub protWebMessageReceived(ByVal pSender As LongPtr, ByVal pArgs As LongPtr)
+    Dim pMessageJson As LongPtr
+    Dim messageJson As String
+    Dim messageText As String
+
+    If pArgs = 0 Then Exit Sub
+    If This.script.syncWaitRequestId = 0 Then Exit Sub
+
+    Call CallVT(pArgs, COREWEBVIEW2WEBMESSAGERECEIVEDEVENTARGS_VTBL_GET_WEBMESSAGEASJSON, vbLong, VarPtr(pMessageJson))
+    messageJson = PtrToStrW(pMessageJson)
+    If pMessageJson <> 0 Then Call CoTaskMemFree(pMessageJson)
+    messageText = JsonUnquoteString(messageJson)
+    Call ScriptSyncBridge_TryConsumeMessage(messageText)
+End Sub
+
+Friend Sub protCookiesCompleted(ByVal errorCode As Long, ByVal pCookieList As LongPtr, ByVal requestId As Long)
+    If requestId <> This.cookie.requestId Then Exit Sub
+    This.cookie.errorCode = errorCode
+    If errorCode = 0 Then
+        Call CookieQuery_ParseCookieList(pCookieList)
+    Else
+        This.cookie.count = 0
+        Erase This.cookie.records
+    End If
+    This.cookie.done = True
+End Sub
+
 Friend Sub protWebResourceRequested(ByVal pSender As LongPtr, ByVal pArgs As LongPtr)
     Dim pRequest As LongPtr
     Dim pHeaders As LongPtr
@@ -1048,10 +1440,18 @@ Friend Sub protCreate(ByVal hwnd As LongPtr, Optional ByVal OnReady As stdICalla
     This.init.failed = False
     This.script.syncDone = False
     This.script.syncWaitRequestId = 0
+    This.script.syncBridgeRequestId = vbNullString
+    This.script.syncBridgeDone = False
+    This.script.syncBridgeOk = False
+    This.script.syncBridgePayload = vbNullString
     This.script.nextRequestId = 0
     This.scripts.scriptCount = 0
     This.deferredWebResource.count = 0
     This.deferredWebResource.nextRequestId = 0
+    This.com.webReqTokenLow = 0
+    This.com.webReqTokenHigh = 0
+    This.com.webMsgTokenLow = 0
+    This.com.webMsgTokenHigh = 0
     Erase This.scripts.mScripts
     Erase This.deferredWebResource.items
     Set This.init.onReadyCallback = OnReady
@@ -1067,10 +1467,10 @@ Friend Sub protCreate(ByVal hwnd As LongPtr, Optional ByVal OnReady As stdICalla
         Err.Raise hr, "stdWebView", "CreateCoreWebView2EnvironmentWithOptions failed (" & CStr(hr) & ")"
     End If
     Dim j As Long
-    For j = 1 To 60000
-        If Not This.init.waiting Then Exit For
+    Do
+        If Not This.init.waiting Then Exit Do
         DoEvents
-    Next j
+    Loop
     If This.init.failed Or This.com.ppWebView2 = 0 Then
         Call CleanupFailedInit
         Err.Raise &H80040201, "stdWebView", "WebView2 initialization failed or timed out"
@@ -1211,6 +1611,7 @@ Private Sub FreeHandlerAllocs()
     Call FreeHandlerThunks(This.com.envThunk)
     Call FreeHandlerThunks(This.com.ctrlThunk)
     Call FreeHandlerThunks(This.com.webReqThunk)
+    Call FreeHandlerThunks(This.com.webMsgThunk)
     If This.com.pEnvHandlerObj <> 0 Then
         Call GlobalFree(This.com.pEnvHandlerObj)
         This.com.pEnvHandlerObj = 0
@@ -1235,6 +1636,21 @@ Private Sub FreeHandlerAllocs()
         Call GlobalFree(This.com.pWebReqVTable)
         This.com.pWebReqVTable = 0
     End If
+    If This.com.pWebMsgHandlerObj <> 0 Then
+        Call GlobalFree(This.com.pWebMsgHandlerObj)
+        This.com.pWebMsgHandlerObj = 0
+    End If
+    If This.com.pWebMsgVTable <> 0 Then
+        Call GlobalFree(This.com.pWebMsgVTable)
+        This.com.pWebMsgVTable = 0
+    End If
+    This.com.webReqTokenLow = 0
+    This.com.webReqTokenHigh = 0
+    This.com.webMsgTokenLow = 0
+    This.com.webMsgTokenHigh = 0
+    Call ScriptSyncBridge_Reset
+    Call CookieQuery_FreeHandlerAllocs
+    Call CookieQuery_Reset
     Call DeferredWebResource_ClearAll(True)
     Call WebResource_ClearFilters
     Call Scripts_ClearAll
@@ -1434,6 +1850,39 @@ Private Sub WebResource_EnsureEventHandler()
     End If
 End Sub
 
+Private Sub WebResource_RemoveEventHandler()
+    If This.com.ppWebView2 = 0 Then Exit Sub
+    If This.com.webReqTokenLow = 0 And This.com.webReqTokenHigh = 0 Then Exit Sub
+    Call CallVTQuiet(This.com.ppWebView2, COREWEBVIEW2_VTBL_REMOVE_WEBRESOURCEREQUESTED, vbLong, VarPtr(This.com.webReqTokenLow))
+    This.com.webReqTokenLow = 0
+    This.com.webReqTokenHigh = 0
+End Sub
+
+Private Sub WebMessage_EnsureEventHandler()
+    Dim hr As Long
+    If This.com.pWebMsgHandlerObj <> 0 Then Exit Sub
+    If This.com.ppWebView2 = 0 Then Err.Raise 5, "stdWebView::WebMessage_EnsureEventHandler", "WebView not ready"
+
+    This.com.pWebMsgVTable = BuildHandlerVTable(7, This.com.webMsgThunk, 3)
+    This.com.pWebMsgHandlerObj = GlobalAlloc(GPTR, PTR_SZ)
+    If This.com.pWebMsgHandlerObj = 0 Then Err.Raise 5, "stdWebView::WebMessage_EnsureEventHandler", "Failed allocating WebMessageReceived handler object"
+    Call CopyMemory(ByVal This.com.pWebMsgHandlerObj, This.com.pWebMsgVTable, PTR_SZ)
+    This.com.webMsgTokenLow = 0
+    This.com.webMsgTokenHigh = 0
+    hr = CLng(CallVT(This.com.ppWebView2, COREWEBVIEW2_VTBL_ADD_WEBMESSAGERECEIVED, vbLong, This.com.pWebMsgHandlerObj, VarPtr(This.com.webMsgTokenLow)))
+    If hr < 0 Then
+        Err.Raise hr, "stdWebView::WebMessage_EnsureEventHandler", "add_WebMessageReceived failed (" & CStr(hr) & ")"
+    End If
+End Sub
+
+Private Sub WebMessage_RemoveEventHandler()
+    If This.com.ppWebView2 = 0 Then Exit Sub
+    If This.com.webMsgTokenLow = 0 And This.com.webMsgTokenHigh = 0 Then Exit Sub
+    Call CallVTQuiet(This.com.ppWebView2, COREWEBVIEW2_VTBL_REMOVE_WEBMESSAGERECEIVED, vbLong, VarPtr(This.com.webMsgTokenLow))
+    This.com.webMsgTokenLow = 0
+    This.com.webMsgTokenHigh = 0
+End Sub
+
 Private Function WebResource_FilterMatches(ByRef filterItem As TWebResourceFilterItem, ByVal uri As String, ByVal context As Long) As Boolean
     Dim u As String
     Dim p As String
@@ -1580,7 +2029,7 @@ Private Sub WebResource_ApplyHeaderChanges(ByVal envelope As Object, ByVal pHead
             Dim objHeaders As Object
             Set objHeaders = removeHeaders
             If TypeName(objHeaders) = "Collection" Then
-                For i = 1 To objHeaders.Count
+                For i = 1 To objHeaders.count
                     headerName = CStr(objHeaders(i))
                     If LenB(headerName) > 0 Then
                         hr = CLng(CallVT(pHeaders, COREWEBVIEW2HTTPREQUESTHEADERS_VTBL_REMOVEHEADER, vbLong, StrPtr(headerName)))
@@ -1713,6 +2162,202 @@ fail:
     If pMem <> 0 Then Call GlobalUnlock(hMem)
     If hMem <> 0 Then Call GlobalFree(hMem)
     WebResource_CreateBodyStream = 0
+End Function
+
+Private Function CookieManager_GetPointer() As LongPtr
+    Dim pCookieManager As LongPtr
+    If Not IsReady Then Err.Raise 5, "stdWebView::CookieManager_GetPointer", "WebView not ready"
+    Call CallVT(This.com.ppWebView2, COREWEBVIEW2_VTBL_GET_COOKIEMANAGER, vbLong, VarPtr(pCookieManager))
+    If pCookieManager = 0 Then Err.Raise 5, "stdWebView::CookieManager_GetPointer", "CookieManager unavailable"
+    CookieManager_GetPointer = pCookieManager
+End Function
+
+Private Sub CookieQuery_LoadForUrl(ByVal Url As String)
+    Dim pCookieManager As LongPtr
+    Dim startedAt As Double
+    Dim hr As Long
+    Dim pObj As LongPtr
+    Dim reqId As Long
+    Dim reqIdLP As LongPtr
+
+    If LenB(Trim$(Url)) = 0 Then Err.Raise 5, "stdWebView::CookieQuery_LoadForUrl", "Url cannot be blank"
+    pCookieManager = CookieManager_GetPointer()
+
+    Call CookieQuery_Reset
+    reqId = CookieQuery_NextRequestId()
+    This.cookie.requestId = reqId
+    This.cookie.pVTable = BuildHandlerVTable(8, This.cookie.thunks, 3)
+    pObj = GlobalAlloc(GPTR, 2& * PTR_SZ)
+    If pObj = 0 Then
+        Call ComRelease(pCookieManager)
+        Call CookieQuery_FreeHandlerAllocs
+        Err.Raise 5, "stdWebView::CookieQuery_LoadForUrl", "Failed allocating GetCookies callback object"
+    End If
+    This.cookie.pHandlerObj = pObj
+    Call CopyMemory(ByVal pObj, This.cookie.pVTable, PTR_SZ)
+    reqIdLP = CLngPtr(reqId)
+    Call CopyMemory(ByVal pObj + PTR_SZ, reqIdLP, PTR_SZ)
+
+    hr = CLng(CallVT(pCookieManager, COREWEBVIEW2COOKIEMANAGER_VTBL_GETCOOKIES, vbLong, StrPtr(Url), pObj))
+    Call ComRelease(pCookieManager)
+    If hr < 0 Then
+        Call CookieQuery_FreeHandlerAllocs
+        Err.Raise hr, "stdWebView::CookieQuery_LoadForUrl", "GetCookies failed (" & CStr(hr) & ")"
+    End If
+
+    startedAt = Timer
+    Do
+        If This.cookie.done Then Exit Do
+        If TimerElapsedMs(startedAt, Timer) >= CDbl(SCRIPT_SYNC_TIMEOUT_MS) Then
+            Call CookieQuery_FreeHandlerAllocs
+            Err.Raise 5, "stdWebView::CookieQuery_LoadForUrl", "Timed out waiting for GetCookies callback"
+        End If
+        DoEvents
+    Loop
+
+    Call CookieQuery_FreeHandlerAllocs
+    If This.cookie.errorCode < 0 Then
+        Err.Raise This.cookie.errorCode, "stdWebView::CookieQuery_LoadForUrl", "GetCookies callback failed (" & CStr(This.cookie.errorCode) & ")"
+    End If
+End Sub
+
+Private Sub CookieQuery_ParseCookieList(ByVal pCookieList As LongPtr)
+    Dim total As Long
+    Dim i As Long
+    Dim pCookie As LongPtr
+    Dim vLong As Long
+    Dim vDouble As Double
+
+    This.cookie.count = 0
+    Erase This.cookie.records
+    If pCookieList = 0 Then Exit Sub
+
+    Call CallVT(pCookieList, COREWEBVIEW2COOKIELIST_VTBL_GET_COUNT, vbLong, VarPtr(total))
+    If total <= 0 Then Exit Sub
+
+    ReDim This.cookie.records(0 To total - 1)
+    For i = 0 To total - 1
+        pCookie = 0
+        Call CallVT(pCookieList, COREWEBVIEW2COOKIELIST_VTBL_GETVALUEATINDEX, vbLong, i, VarPtr(pCookie))
+        If pCookie = 0 Then GoTo nextCookie
+
+        This.cookie.records(i).Name = Cookie_GetStringProp(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_NAME)
+        This.cookie.records(i).Value = Cookie_GetStringProp(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_VALUE)
+        This.cookie.records(i).Domain = Cookie_GetStringProp(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_DOMAIN)
+        This.cookie.records(i).Path = Cookie_GetStringProp(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_PATH)
+
+        vDouble = 0#
+        On Error Resume Next
+        Call CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_EXPIRES, vbLong, VarPtr(vDouble))
+        On Error GoTo 0
+        This.cookie.records(i).ExpiresUtcSeconds = vDouble
+
+        vLong = 0
+        Call CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_ISSECURE, vbLong, VarPtr(vLong))
+        This.cookie.records(i).IsSecure = (vLong <> 0)
+
+        vLong = 0
+        Call CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_ISHTTPONLY, vbLong, VarPtr(vLong))
+        This.cookie.records(i).IsHttpOnly = (vLong <> 0)
+
+        vLong = 0
+        Call CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_SAMESITE, vbLong, VarPtr(vLong))
+        This.cookie.records(i).SameSite = vLong
+
+        vLong = 0
+        Call CallVT(pCookie, COREWEBVIEW2COOKIE_VTBL_GET_ISSESSION, vbLong, VarPtr(vLong))
+        This.cookie.records(i).IsSession = (vLong <> 0)
+
+        This.cookie.count = This.cookie.count + 1
+        Call ComRelease(pCookie)
+nextCookie:
+    Next i
+End Sub
+
+Private Function Cookie_GetStringProp(ByVal pCookie As LongPtr, ByVal vtblOffset As Long) As String
+    Dim pText As LongPtr
+    Dim hr As Long
+    pText = 0
+    hr = CLng(CallVT(pCookie, vtblOffset, vbLong, VarPtr(pText)))
+    If hr < 0 Then Exit Function
+    Cookie_GetStringProp = PtrToStrW(pText)
+    If pText <> 0 Then Call CoTaskMemFree(pText)
+End Function
+
+Private Sub CookieQuery_Reset()
+    This.cookie.requestId = 0
+    This.cookie.done = False
+    This.cookie.errorCode = 0
+    This.cookie.count = 0
+    Erase This.cookie.records
+End Sub
+
+Private Function CookieQuery_NextRequestId() As Long
+    This.cookie.nextRequestId = This.cookie.nextRequestId + 1
+    If This.cookie.nextRequestId <= 0 Then This.cookie.nextRequestId = 1
+    CookieQuery_NextRequestId = This.cookie.nextRequestId
+End Function
+
+Private Sub CookieQuery_FreeHandlerAllocs()
+    If This.cookie.pHandlerObj <> 0 Then
+        Call GlobalFree(This.cookie.pHandlerObj)
+        This.cookie.pHandlerObj = 0
+    End If
+    If This.cookie.pVTable <> 0 Then
+        Call GlobalFree(This.cookie.pVTable)
+        This.cookie.pVTable = 0
+    End If
+    Call FreeHandlerThunks(This.cookie.thunks)
+End Sub
+
+'Normalize URL for WaitForDocumentReady prefix compare: lowercase, trim, strip http(s)://, strip one leading www.
+Private Function UrlWaitPrefixNormalize(ByVal url As String) As String
+    Dim s As String
+    s = LCase$(Trim$(url))
+    If LenB(s) = 0 Then Exit Function
+    If Left$(s, 8) = "https://" Then
+        s = Mid$(s, 9)
+    ElseIf Left$(s, 7) = "http://" Then
+        s = Mid$(s, 8)
+    End If
+    If Left$(s, 4) = "www." Then
+        s = Mid$(s, 5)
+    End If
+    UrlWaitPrefixNormalize = s
+End Function
+
+Private Function UrlHost(ByVal url As String) As String
+    Dim s As String
+    Dim startAt As Long
+    Dim slashAt As Long
+    Dim atAt As Long
+    Dim colonAt As Long
+
+    s = Trim$(url)
+    If LenB(s) = 0 Then Exit Function
+    startAt = InStr(1, s, "://", vbTextCompare)
+    If startAt > 0 Then
+        startAt = startAt + 3
+    Else
+        startAt = 1
+    End If
+
+    slashAt = InStr(startAt, s, "/")
+    If slashAt > 0 Then
+        UrlHost = Mid$(s, startAt, slashAt - startAt)
+    Else
+        UrlHost = Mid$(s, startAt)
+    End If
+
+    atAt = InStr(1, UrlHost, "@")
+    If atAt > 0 Then UrlHost = Mid$(UrlHost, atAt + 1)
+
+    colonAt = InStr(1, UrlHost, ":")
+    If colonAt > 0 Then UrlHost = Left$(UrlHost, colonAt - 1)
+End Function
+
+Private Function DateToUnixSeconds(ByVal d As Date) As Double
+    DateToUnixSeconds = (CDbl(d) - CDbl(#1/1/1970#)) * 86400#
 End Function
 
 Private Function NextScriptRequestId() As Long
@@ -1922,6 +2567,23 @@ Private Function PtsToPx(ByVal pts As Long, ByVal vertical As Boolean) As Long
     PtsToPx = CLng(CDbl(pts) * (CDbl(dpi) / 72#))
 End Function
 
+Private Sub SpinWaitMs(ByVal milliseconds As Long)
+    Dim waitStart As Double
+    waitStart = Timer
+    Do
+        DoEvents
+        If TimerElapsedMs(waitStart, Timer) >= CDbl(milliseconds) Then Exit Do
+    Loop
+End Sub
+
+Private Function TimerElapsedMs(ByVal startedAt As Double, ByVal nowAt As Double) As Double
+    If nowAt >= startedAt Then
+        TimerElapsedMs = (nowAt - startedAt) * 1000#
+    Else
+        TimerElapsedMs = ((86400# - startedAt) + nowAt) * 1000#
+    End If
+End Function
+
 Private Function JsonUnquoteString(ByVal s As String) As String
     Dim t As String
     Dim i As Long
@@ -1956,6 +2618,81 @@ Private Function JsonUnquoteString(ByVal s As String) As String
         i = i + 1
     Loop
     JsonUnquoteString = out
+End Function
+
+Private Function JsonQuoteString(ByVal value As String) As String
+    Dim s As String
+    s = value
+    s = Replace(s, "\", "\\")
+    s = Replace(s, """", "\""")
+    s = Replace(s, vbCrLf, "\n")
+    s = Replace(s, vbCr, "\n")
+    s = Replace(s, vbLf, "\n")
+    JsonQuoteString = """" & s & """"
+End Function
+
+Private Sub ScriptSyncBridge_Reset()
+    This.script.syncBridgeRequestId = vbNullString
+    This.script.syncBridgeDone = False
+    This.script.syncBridgeOk = False
+    This.script.syncBridgePayload = vbNullString
+End Sub
+
+Private Function ScriptSyncBridge_TryConsumeMessage(ByVal messageText As String) As Boolean
+    Dim prefixLen As Long
+    Dim p1 As Long
+    Dim p2 As Long
+    Dim token As String
+    Dim requestId As String
+    Dim okFlag As String
+    Dim payload As String
+
+    prefixLen = Len(SCRIPT_SYNC_BRIDGE_PREFIX)
+    p1 = InStr(1, messageText, "|", vbBinaryCompare)
+    If p1 <= prefixLen Then Exit Function
+
+    token = Left$(messageText, p1 - 1)
+    If Left$(token, prefixLen) <> SCRIPT_SYNC_BRIDGE_PREFIX Then Exit Function
+    requestId = Mid$(token, prefixLen + 1)
+    If requestId <> This.script.syncBridgeRequestId Then Exit Function
+
+    p2 = InStr(p1 + 1, messageText, "|", vbBinaryCompare)
+    If p2 <= p1 Then Exit Function
+
+    okFlag = Mid$(messageText, p1 + 1, p2 - p1 - 1)
+    payload = Mid$(messageText, p2 + 1)
+    If LenB(payload) = 0 Then payload = "null"
+
+    This.script.syncBridgeOk = (okFlag = "1")
+    This.script.syncBridgePayload = payload
+    This.script.syncBridgeDone = True
+    ScriptSyncBridge_TryConsumeMessage = True
+End Function
+
+Private Function BuildSyncBridgeScript(ByVal userScript As String, ByVal bridgeRequestId As String) As String
+    Dim scriptLiteral As String
+    Dim tokenLiteral As String
+
+    scriptLiteral = JsonQuoteString(userScript)
+    tokenLiteral = JsonQuoteString(SCRIPT_SYNC_BRIDGE_PREFIX & bridgeRequestId)
+
+    BuildSyncBridgeScript = "(function(){" _
+        & "const __stdwvToken=" & tokenLiteral & ";" _
+        & "const __stdwvSource=" & scriptLiteral & ";" _
+        & "const __stdwvPost=function(ok,payload){try{if(window.chrome&&chrome.webview&&chrome.webview.postMessage){chrome.webview.postMessage(__stdwvToken+'|'+(ok?'1':'0')+'|'+payload);}}catch(_){}};" _
+        & "const __stdwvToJson=function(v){try{const s=JSON.stringify(v);return (s===undefined)?'null':s;}catch(_){return 'null';}};" _
+        & "try{" _
+            & "const __stdwvValue=(0,eval)(__stdwvSource);" _
+            & "if(__stdwvValue&&typeof __stdwvValue.then==='function'){" _
+                & "__stdwvValue.then(function(v){__stdwvPost(true,__stdwvToJson(v));},function(e){const m=(e&&e.message)?String(e.message):String(e);__stdwvPost(false,JSON.stringify(m));});" _
+            & "}else{" _
+                & "__stdwvPost(true,__stdwvToJson(__stdwvValue));" _
+            & "}" _
+        & "}catch(e){" _
+            & "const m=(e&&e.message)?String(e.message):String(e);__stdwvPost(false,JSON.stringify(m));" _
+        & "}" _
+        & "return null;" _
+    & "})()"
 End Function
 
 ' ============================================================================

@@ -264,14 +264,20 @@ End Sub
 '@returns - if value was a stdJSON, this is returned, else `Nothing`.
 '@remark Uses `protAddItem_JSONArray` when `This.iType == eJSONArray`; and `protAddItem_JSONObject` when `This.iType == eJSONObject`.
 Public Function Add(ParamArray v()) As stdJSON
+  Dim key,item
   Select Case This.iType
     Case eJSONObject
-      Call This.children.add(v(0), v(1))
-      If TypeOf v(1) Is stdJSON Then Set Add = v(1)
+      key = v(0)
+      Call CopyVariant(item, v(1))
+      Call This.children.add(key, item)
     Case eJSONArray
-      Call This.children.add(v(0))
-      If TypeOf v(0) Is stdJSON Then Set Add = v(0)
+      Call CopyVariant(item, v(0))
+      Call This.children.add(item)
   End Select
+  If IsObject(item) Then
+    if item is nothing then exit function
+    If TypeOf item Is stdJSON Then Set Add = item
+  end if
 End Function
 
 'Create and add an array to the JSON object/array.
@@ -875,7 +881,8 @@ Private Function CreateDictionary(ParamArray children()) As Object
   #Else
     Set CreateDictionary = New Scripting.Dictionary
   #End If
-  CreateDictionary.CompareMode = vbTextCompare
+  'JSON object keys are case-sensitive ("Id" and "ID" are different keys).
+  CreateDictionary.CompareMode = vbBinaryCompare
 
   Dim i As Long
   For i = LBound(children) To UBound(children) Step 2
